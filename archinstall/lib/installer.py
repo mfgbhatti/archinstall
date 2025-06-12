@@ -44,7 +44,7 @@ from .models.locale import LocaleConfiguration
 from .models.mirrors import MirrorConfiguration
 from .models.network_configuration import Nic
 from .models.users import User
-from .output import debug, error, info, log, warn
+from .output import debug, error, info, log, logger, warn
 from .pacman import Pacman
 from .pacman.config import PacmanConfig
 from .plugins import plugins
@@ -92,8 +92,6 @@ class Installer:
 
 		self.post_base_install: list[Callable] = []  # type: ignore[type-arg]
 
-		# TODO: Figure out which one of these two we'll use.. But currently we're mixing them..
-		storage['session'] = self
 		storage['installation_session'] = self
 
 		self._modules: list[str] = []
@@ -126,21 +124,24 @@ class Installer:
 	def __enter__(self) -> 'Installer':
 		return self
 
-	def __exit__(self, exc_type: type[BaseException] | None, exc_val, exc_tb: TracebackType | None) -> bool:
+	def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> bool | None:
 		if exc_type is not None:
-			error(exc_val)
+			error(str(exc_value))
 
 			self.sync_log_to_install_medium()
 
 			# We avoid printing /mnt/<log path> because that might confuse people if they note it down
 			# and then reboot, and a identical log file will be found in the ISO medium anyway.
-			log_file = os.path.join(storage['LOG_PATH'], storage['LOG_FILE'])
-			Tui.print(str(tr('[!] A log file has been created here: {}').format(log_file)))
+			Tui.print(str(tr('[!] A log file has been created here: {}').format(logger.path)))
 			Tui.print(tr('Please submit this issue (and file) to https://github.com/archlinux/archinstall/issues'))
-			raise exc_val
+
+			# Return None to propagate the exception
+			return None
+
+		self.sync()
 
 		if not (missing_steps := self.post_install_check()):
-			msg = f'Installation completed without any errors.\nLog files temporarily available at {storage["LOG_PATH"]}.\nYou may reboot when ready.\n'
+			msg = f'Installation completed without any errors.\nLog files temporarily available at {logger.directory}.\nYou may reboot when ready.\n'
 			log(msg, fg='green')
 			self.sync_log_to_install_medium()
 			return True
@@ -150,11 +151,15 @@ class Installer:
 			for step in missing_steps:
 				warn(f' - {step}')
 
-			warn(f'Detailed error logs can be found at: {storage["LOG_PATH"]}')
+			warn(f'Detailed error logs can be found at: {logger.directory}')
 			warn('Submit this zip file as an issue to https://github.com/archlinux/archinstall/issues')
 
 			self.sync_log_to_install_medium()
 			return False
+
+	def sync(self) -> None:
+		info(tr('Syncing the system...'))
+		SysCommand('sync')
 
 	def remove_mod(self, mod: str) -> None:
 		if mod in self._modules:
@@ -458,13 +463,12 @@ class Installer:
 		# Copy over the install log (if there is one) to the install medium if
 		# at least the base has been strapped in, otherwise we won't have a filesystem/structure to copy to.
 		if self._helper_flags.get('base-strapped', False) is True:
-			if filename := storage.get('LOG_FILE', None):
-				absolute_logfile = os.path.join(storage.get('LOG_PATH', './'), filename)
+			absolute_logfile = logger.path
 
-				if not os.path.isdir(f'{self.target}/{os.path.dirname(absolute_logfile)}'):
-					os.makedirs(f'{self.target}/{os.path.dirname(absolute_logfile)}')
+			if not os.path.isdir(f'{self.target}/{os.path.dirname(absolute_logfile)}'):
+				os.makedirs(f'{self.target}/{os.path.dirname(absolute_logfile)}')
 
-				shutil.copy2(absolute_logfile, f'{self.target}/{absolute_logfile}')
+			shutil.copy2(absolute_logfile, f'{self.target}/{absolute_logfile}')
 
 		return True
 
@@ -828,7 +832,7 @@ class Installer:
 		mkinitcpio: bool = True,
 		hostname: str | None = None,
 		locale_config: LocaleConfiguration | None = LocaleConfiguration.default(),
-	):
+	) -> None:
 		if self._disk_config.lvm_config:
 			lvm = 'lvm2'
 			self.add_additional_packages(lvm)
@@ -952,7 +956,7 @@ class Installer:
 
 			if bootloader and bootloader == Bootloader.Grub:
 				self.pacman.strap('grub-btrfs')
-				self.enable_service('grub-btrfs.service')
+				self.enable_service('grub-btrfsd.service')
 
 	def setup_swap(self, kind: str = 'zram') -> None:
 		if kind == 'zram':
@@ -1012,7 +1016,7 @@ class Installer:
 			# TODO: We need to detect if the encrypted device is a whole disk encryption,
 			#       or simply a partition encryption. Right now we assume it's a partition (and we always have)
 
-			if self._disk_encryption and self._disk_encryption.hsm_device:
+			if self._disk_encryption.hsm_device:
 				debug(f'Root partition is an encrypted device, identifying by UUID: {root_partition.uuid}')
 				# Note: UUID must be used, not PARTUUID for sd-encrypt to work
 				kernel_parameters.append(f'rd.luks.name={root_partition.uuid}=root')
@@ -1672,8 +1676,7 @@ class Installer:
 				if result := plugin.on_user_created(self, user):
 					handled_by_plugin = result
 
-		if user.password:
-			self.set_user_password(user)
+		self.set_user_password(user)
 
 		for group in user.groups:
 			SysCommand(f'arch-chroot {self.target} gpasswd -a {user.username} {group}')
@@ -1684,7 +1687,7 @@ class Installer:
 	def set_user_password(self, user: User) -> bool:
 		info(f'Setting password for {user.username}')
 
-		enc_password = user.password.enc_password if user.password else None
+		enc_password = user.password.enc_password
 
 		if not enc_password:
 			debug('User password is empty')

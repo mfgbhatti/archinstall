@@ -31,25 +31,26 @@ def perform_installation(mountpoint: Path) -> None:
 	) as installation:
 		# Strap in the base system, add a boot loader and configure
 		# some other minor details as specified by this profile and user.
-		if installation.minimal_installation():
-			installation.set_hostname('minimal-arch')
-			installation.add_bootloader(Bootloader.Systemd)
+		installation.mount_ordered_layout()
+		installation.minimal_installation()
+		installation.set_hostname('minimal-arch')
+		installation.add_bootloader(Bootloader.Systemd)
 
-			network_config = config.network_config
+		network_config = config.network_config
 
-			if network_config:
-				network_config.install_network_config(
-					installation,
-					config.profile_config,
-				)
+		if network_config:
+			network_config.install_network_config(
+				installation,
+				config.profile_config,
+			)
 
-			installation.add_additional_packages(['nano', 'wget', 'git'])
+		installation.add_additional_packages(['nano', 'wget', 'git'])
 
-			profile_config = ProfileConfiguration(MinimalProfile())
-			profile_handler.install_profile_config(installation, profile_config)
+		profile_config = ProfileConfiguration(MinimalProfile())
+		profile_handler.install_profile_config(installation, profile_config)
 
-			user = User('devel', Password(plaintext='devel'), False)
-			installation.create_users(user)
+		user = User('devel', Password(plaintext='devel'), False)
+		installation.create_users(user)
 
 	# Once this is done, we output some useful information to the user
 	# And the installation is complete.
@@ -71,10 +72,14 @@ def _minimal() -> None:
 		exit(0)
 
 	if not arch_config_handler.args.silent:
+		aborted = False
 		with Tui():
 			if not config.confirm_config():
 				debug('Installation aborted')
-				_minimal()
+				aborted = True
+
+		if aborted:
+			return _minimal()
 
 	if arch_config_handler.config.disk_config:
 		fs_handler = FilesystemHandler(arch_config_handler.config.disk_config)

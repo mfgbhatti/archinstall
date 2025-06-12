@@ -84,7 +84,6 @@ class DiskLayoutConfiguration:
 		cls,
 		disk_config: _DiskLayoutConfigurationSerialization,
 		enc_password: Password | None = None,
-		disk_encryption: _DiskEncryptionSerialization | None = None,
 	) -> DiskLayoutConfiguration | None:
 		from archinstall.lib.disk.device_handler import device_handler
 
@@ -890,7 +889,7 @@ class PartitionModification:
 	def __post_init__(self) -> None:
 		# needed to use the object as a dictionary key due to hash func
 		if not hasattr(self, '_obj_id'):
-			self._obj_id: uuid.UUID | str = uuid.uuid4()
+			self._obj_id = uuid.uuid4()
 
 		if self.is_exists_or_modify() and not self.dev_path:
 			raise ValueError('If partition marked as existing a path must be set')
@@ -1010,6 +1009,10 @@ class PartitionModification:
 
 	@property
 	def mapper_name(self) -> str | None:
+		if self.is_root():
+			return 'root'
+		if self.is_home():
+			return 'home'
 		if self.dev_path:
 			return f'{ENC_IDENTIFIER}{self.dev_path.name}'
 		return None
@@ -1155,7 +1158,7 @@ class LvmVolume:
 	def __post_init__(self) -> None:
 		# needed to use the object as a dictionary key due to hash func
 		if not hasattr(self, '_obj_id'):
-			self._obj_id: uuid.UUID | str = uuid.uuid4()
+			self._obj_id = uuid.uuid4()
 
 	@override
 	def __hash__(self) -> int:
@@ -1367,7 +1370,7 @@ class SnapshotConfig:
 		return {'type': self.snapshot_type.value}
 
 	@staticmethod
-	def parse_args(args: _SnapshotConfigSerialization) -> SnapshotConfig | None:
+	def parse_args(args: _SnapshotConfigSerialization) -> SnapshotConfig:
 		return SnapshotConfig(SnapshotType(args['type']))
 
 
@@ -1488,9 +1491,8 @@ class DiskEncryption:
 	def should_generate_encryption_file(self, dev: PartitionModification | LvmVolume) -> bool:
 		if isinstance(dev, PartitionModification):
 			return dev in self.partitions and dev.mountpoint != Path('/')
-		elif isinstance(dev, LvmVolume):
+		else:
 			return dev in self.lvm_volumes and dev.mountpoint != Path('/')
-		return False
 
 	def json(self) -> _DiskEncryptionSerialization:
 		obj: _DiskEncryptionSerialization = {

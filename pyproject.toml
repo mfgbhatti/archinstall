@@ -1,15 +1,15 @@
 [build-system]
-requires = ["setuptools>=67.5"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "archinstall"
-version = "3.0.6"
+version = "3.0.7"
 description = "Arch Linux installer - guided, templates etc."
 authors = [
     {name = "Anton Hvornum", email = "anton@hvornum.se"},
 ]
-license = {text = "GPL-3.0-only"}
+license = "GPL-3.0-only"
 readme = "README.md"
 requires-python = ">=3.12"
 keywords = ["linux", "arch", "archinstall", "installer"]
@@ -31,13 +31,13 @@ Source = "https://github.com/archlinux/archinstall"
 [project.optional-dependencies]
 log = ["systemd_python==235"]
 dev = [
-    "mypy==1.15.0",
+    "mypy==1.16.0",
     "flake8==7.2.0",
     "pre-commit==4.2.0",
-    "ruff==0.11.11",
+    "ruff==0.11.13",
     "pylint==3.3.7",
     "pylint-pydantic==0.3.5",
-    "pytest==8.3.5",
+    "pytest==8.4.0",
 ]
 doc = ["sphinx"]
 
@@ -78,12 +78,13 @@ enable_error_code = [
     "possibly-undefined",
     "redundant-expr",
     "redundant-self",
+    "truthy-bool",
     "truthy-iterable",
     "unimported-reveal",
     "unused-awaitable",
 ]
+show_traceback = true
 strict = true
-strict_bytes = true
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
@@ -96,10 +97,7 @@ disallow_any_explicit = true
 
 [[tool.mypy.overrides]]
 module = "archinstall.lib.*"
-disallow_incomplete_defs = false
-disallow_untyped_defs = false
 warn_return_any = false
-warn_unreachable = false
 
 [[tool.mypy.overrides]]
 module = "archinstall.lib.disk.*"
@@ -118,10 +116,6 @@ disallow_any_explicit = true
 [[tool.mypy.overrides]]
 module = "archinstall.lib.utils"
 disallow_any_explicit = true
-
-[[tool.mypy.overrides]]
-module = "archinstall.tui.*"
-warn_unreachable = false
 
 [[tool.mypy.overrides]]
 module = [
@@ -226,7 +220,6 @@ ignore = [
     "PLW1514",  # unspecified-encoding
     "PLW1641",  # eq-without-hash
     "PLW2901",  # redefined-loop-name
-    "PYI036",   # bad-exit-annotation
     "RUF005",   # collection-literal-concatenation
     "RUF015",   # unnecessary-iterable-allocation-for-first-element
     "RUF039",   # unraw-re-pattern

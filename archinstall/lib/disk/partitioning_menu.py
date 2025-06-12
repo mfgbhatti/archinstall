@@ -323,17 +323,17 @@ class PartitioningList(ListManager[DiskSegment]):
 						partition.invert_flag(PartitionFlag.XBOOTLDR)
 				case 'set_filesystem':
 					fs_type = self._prompt_partition_fs_type()
-					if fs_type:
-						if partition.is_swap():
-							partition.invert_flag(PartitionFlag.SWAP)
-						partition.fs_type = fs_type
-						if partition.is_swap():
-							partition.mountpoint = None
-							partition.flags = []
-							partition.set_flag(PartitionFlag.SWAP)
-						# btrfs subvolumes will define mountpoints
-						if fs_type == FilesystemType.Btrfs:
-							partition.mountpoint = None
+
+					if partition.is_swap():
+						partition.invert_flag(PartitionFlag.SWAP)
+					partition.fs_type = fs_type
+					if partition.is_swap():
+						partition.mountpoint = None
+						partition.flags = []
+						partition.set_flag(PartitionFlag.SWAP)
+					# btrfs subvolumes will define mountpoints
+					if fs_type == FilesystemType.Btrfs:
+						partition.mountpoint = None
 				case 'btrfs_mark_compressed':
 					self._toggle_mount_option(partition, BtrfsMountOption.compress)
 				case 'btrfs_mark_nodatacow':
@@ -464,7 +464,10 @@ class PartitioningList(ListManager[DiskSegment]):
 		return size
 
 	def _prompt_size(self, free_space: FreeSpace) -> Size:
-		def validate(value: str) -> str | None:
+		def validate(value: str | None) -> str | None:
+			if not value:
+				return None
+
 			size = self._validate_value(sector_size, max_size, value)
 			if not size:
 				return tr('Invalid size')

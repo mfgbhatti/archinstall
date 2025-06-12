@@ -94,8 +94,8 @@ class DiskLayoutConfigurationMenu(AbstractSubMenu[DiskLayoutConfiguration]):
 		]
 
 	@override
-	def run(self) -> DiskLayoutConfiguration | None:
-		super().run()
+	def run(self, additional_title: str | None = None) -> DiskLayoutConfiguration | None:
+		super().run(additional_title=additional_title)
 
 		if self._disk_menu_config.disk_config:
 			self._disk_menu_config.disk_config.lvm_config = self._disk_menu_config.lvm_config
@@ -176,20 +176,13 @@ class DiskLayoutConfigurationMenu(AbstractSubMenu[DiskLayoutConfiguration]):
 			alignment=Alignment.CENTER,
 		).run()
 
-		snapshot_type: SnapshotType | None = None
-
 		match result.type_:
 			case ResultType.Skip:
 				return preset
 			case ResultType.Reset:
 				return None
 			case ResultType.Selection:
-				snapshot_type = result.get_value()
-
-		if not snapshot_type:
-			return None
-
-		return SnapshotConfig(snapshot_type=snapshot_type)
+				return SnapshotConfig(snapshot_type=result.get_value())
 
 	def _prev_disk_layouts(self, item: MenuItem) -> str | None:
 		if not item.value:

@@ -16,11 +16,11 @@ from enum import Enum
 from pathlib import Path
 from select import EPOLLHUP, EPOLLIN, epoll
 from shutil import which
+from types import TracebackType
 from typing import Any, override
 
 from .exceptions import RequirementError, SysCallError
-from .output import debug, error
-from .storage import storage
+from .output import debug, error, logger
 
 # https://stackoverflow.com/a/43627833/929999
 _VT100_ESCAPE_REGEX = r'\x1B\[[?0-9;]*[a-zA-Z]'
@@ -104,7 +104,7 @@ class SysCommandWorker:
 		cmd: str | list[str],
 		peek_output: bool | None = False,
 		environment_vars: dict[str, str] | None = None,
-		working_directory: str | None = './',
+		working_directory: str = './',
 		remove_vt100_escape_codes_from_lines: bool = True,
 	):
 		if isinstance(cmd, str):
@@ -171,7 +171,7 @@ class SysCommandWorker:
 	def __enter__(self) -> 'SysCommandWorker':
 		return self
 
-	def __exit__(self, *args: str) -> None:
+	def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> None:
 		# b''.join(sys_command('sync')) # No need to, since the underlying fs() object will call sync.
 		# TODO: https://stackoverflow.com/questions/28157929/how-to-safely-handle-an-exception-inside-a-context-manager
 
@@ -187,8 +187,8 @@ class SysCommandWorker:
 			sys.stdout.write('\n')
 			sys.stdout.flush()
 
-		if len(args) >= 2 and args[1]:
-			debug(args[1])
+		if exc_type is not None:
+			debug(str(exc_value))
 
 		if self.exit_code != 0:
 			raise SysCallError(
@@ -237,19 +237,9 @@ class SysCommandWorker:
 				except UnicodeDecodeError:
 					return False
 
-			peak_logfile = Path(f'{storage["LOG_PATH"]}/cmd_output.txt')
+			_cmd_output(output)
 
-			change_perm = False
-			if peak_logfile.exists() is False:
-				change_perm = True
-
-			with peak_logfile.open('a') as peek_output_log:
-				peek_output_log.write(str(output))
-
-			if change_perm:
-				peak_logfile.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP)
-
-			sys.stdout.write(str(output))
+			sys.stdout.write(output)
 			sys.stdout.flush()
 
 		return True
@@ -296,7 +286,7 @@ class SysCommandWorker:
 
 		# https://stackoverflow.com/questions/4022600/python-pty-fork-how-does-it-work
 		if not self.pid:
-			_log_cmd(self.cmd)
+			_cmd_history(self.cmd)
 
 			try:
 				os.execve(self.cmd[0], list(self.cmd), {**os.environ, **self.environment_vars})
@@ -323,7 +313,7 @@ class SysCommand:
 		cmd: str | list[str],
 		peek_output: bool | None = False,
 		environment_vars: dict[str, str] | None = None,
-		working_directory: str | None = './',
+		working_directory: str = './',
 		remove_vt100_escape_codes_from_lines: bool = True,
 	):
 		self.cmd = cmd
@@ -338,18 +328,18 @@ class SysCommand:
 	def __enter__(self) -> SysCommandWorker | None:
 		return self.session
 
-	def __exit__(self, *args: str, **kwargs: dict[str, Any]) -> None:
+	def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> None:
 		# b''.join(sys_command('sync')) # No need to, since the underlying fs() object will call sync.
 		# TODO: https://stackoverflow.com/questions/28157929/how-to-safely-handle-an-exception-inside-a-context-manager
 
-		if len(args) >= 2 and args[1]:
-			error(args[1])
+		if exc_type is not None:
+			error(str(exc_value))
 
 	def __iter__(self, *args: list[Any], **kwargs: dict[str, Any]) -> Iterator[bytes]:
 		if self.session:
 			yield from self.session
 
-	def __getitem__(self, key: slice) -> bytes | None:
+	def __getitem__(self, key: slice) -> bytes:
 		if not self.session:
 			raise KeyError('SysCommand() does not have an active session.')
 		elif type(key) is slice:
@@ -424,29 +414,36 @@ class SysCommand:
 		return None
 
 
-def _log_cmd(cmd: list[str]) -> None:
-	history_logfile = Path(f'{storage["LOG_PATH"]}/cmd_history.txt')
+def _append_log(file: str, content: str) -> None:
+	path = logger.directory / file
 
-	change_perm = False
-	if history_logfile.exists() is False:
-		change_perm = True
+	change_perm = not path.exists()
 
 	try:
-		with history_logfile.open('a') as cmd_log:
-			cmd_log.write(f'{time.time()} {cmd}\n')
+		with path.open('a') as f:
+			f.write(content)
 
 		if change_perm:
-			history_logfile.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP)
+			path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP)
 	except (PermissionError, FileNotFoundError):
-		# If history_logfile does not exist, ignore the error
+		# If the file does not exist, ignore the error
 		pass
+
+
+def _cmd_history(cmd: list[str]) -> None:
+	content = f'{time.time()} {cmd}\n'
+	_append_log('cmd_history.txt', content)
+
+
+def _cmd_output(output: str) -> None:
+	_append_log('cmd_output.txt', output)
 
 
 def run(
 	cmd: list[str],
 	input_data: bytes | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
-	_log_cmd(cmd)
+	_cmd_history(cmd)
 
 	return subprocess.run(
 		cmd,

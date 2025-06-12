@@ -58,9 +58,10 @@ class UserList(ListManager[User]):
 
 		return data
 
-	def _check_for_correct_username(self, username: str) -> str | None:
-		if re.match(r'^[a-z_][a-z0-9_-]*\$?$', username) and len(username) <= 32:
-			return None
+	def _check_for_correct_username(self, username: str | None) -> str | None:
+		if username is not None:
+			if re.match(r'^[a-z_][a-z0-9_-]*\$?$', username) and len(username) <= 32:
+				return None
 		return tr('The username you entered is invalid')
 
 	def _add_user(self) -> User | None:
@@ -77,6 +78,9 @@ class UserList(ListManager[User]):
 				username = editResult.text()
 			case _:
 				raise ValueError('Unhandled result type')
+
+		if not username:
+			return None
 
 		header = f'{tr("Username")}: {username}\n'
 

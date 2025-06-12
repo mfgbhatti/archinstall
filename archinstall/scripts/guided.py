@@ -16,7 +16,9 @@ from archinstall.lib.models.device_model import (
 )
 from archinstall.lib.models.users import User
 from archinstall.lib.output import debug, error, info
+from archinstall.lib.packages.packages import check_package_upgrade
 from archinstall.lib.profile.profiles_handler import profile_handler
+from archinstall.lib.translationhandler import tr
 from archinstall.tui import Tui
 
 
@@ -27,13 +29,20 @@ def ask_user_questions() -> None:
 	will we continue with the actual installation steps.
 	"""
 
+	title_text = None
+
+	upgrade = check_package_upgrade('archinstall')
+	if upgrade:
+		text = tr('New version available') + f': {upgrade}'
+		title_text = f'  ({text})'
+
 	with Tui():
 		global_menu = GlobalMenu(arch_config_handler.config)
 
 		if not arch_config_handler.args.advanced:
 			global_menu.set_enabled('parallel_downloads', False)
 
-		global_menu.run()
+		global_menu.run(additional_title=title_text)
 
 
 def perform_installation(mountpoint: Path) -> None:
@@ -182,10 +191,14 @@ def guided() -> None:
 		exit(0)
 
 	if not arch_config_handler.args.silent:
+		aborted = False
 		with Tui():
 			if not config.confirm_config():
 				debug('Installation aborted')
-				guided()
+				aborted = True
+
+		if aborted:
+			return guided()
 
 	if arch_config_handler.config.disk_config:
 		fs_handler = FilesystemHandler(arch_config_handler.config.disk_config)

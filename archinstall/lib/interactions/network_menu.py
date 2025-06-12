@@ -87,7 +87,12 @@ class ManualNetworkConfig(ListManager[Nic]):
 		multi: bool,
 		preset: str | None = None,
 	) -> str | None:
-		def validator(ip: str) -> str | None:
+		def validator(ip: str | None) -> str | None:
+			failure = tr('You need to enter a valid IP in IP-config mode')
+
+			if not ip:
+				return failure
+
 			if multi:
 				ips = ip.split(' ')
 			else:
@@ -98,7 +103,7 @@ class ManualNetworkConfig(ListManager[Nic]):
 					ipaddress.ip_interface(ip)
 				return None
 			except ValueError:
-				return tr('You need to enter a valid IP in IP-config mode')
+				return failure
 
 		result = EditMenu(
 			title,
@@ -186,7 +191,7 @@ def ask_to_configure_network(preset: NetworkConfiguration | None) -> NetworkConf
 	if preset:
 		group.set_selected_by_value(preset.type)
 
-	result = SelectMenu[NetworkConfiguration](
+	result = SelectMenu[NicType](
 		group,
 		alignment=Alignment.CENTER,
 		frame=FrameProperties.min(tr('Network configuration')),

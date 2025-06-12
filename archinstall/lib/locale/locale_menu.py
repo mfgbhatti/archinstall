@@ -51,7 +51,7 @@ class LocaleMenu(AbstractSubMenu[LocaleConfiguration]):
 			),
 		]
 
-	def _prev_locale(self, item: MenuItem) -> str | None:
+	def _prev_locale(self, item: MenuItem) -> str:
 		temp_locale = LocaleConfiguration(
 			self._menu_item_group.find_by_key('kb_layout').get_value(),
 			self._menu_item_group.find_by_key('sys_lang').get_value(),
@@ -60,8 +60,11 @@ class LocaleMenu(AbstractSubMenu[LocaleConfiguration]):
 		return temp_locale.preview()
 
 	@override
-	def run(self) -> LocaleConfiguration:
-		super().run()
+	def run(
+		self,
+		additional_title: str | None = None,
+	) -> LocaleConfiguration:
+		super().run(additional_title=additional_title)
 		return self._locale_conf
 
 	def _select_kb_layout(self, preset: str | None) -> str | None:
@@ -149,5 +152,3 @@ def select_kb_layout(preset: str | None = None) -> str | None:
 			return preset
 		case _:
 			raise ValueError('Unhandled return type')
-
-	return None
